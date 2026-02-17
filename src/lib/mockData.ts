@@ -41,13 +41,13 @@ export interface Payment {
 }
 
 export const MOCK_PROJECTS: Project[] = [
-    { id: '1', name: 'Planta de Energía Solar A1', owner: 'Juan Pérez', currency: 'USD', status: 'Active', totalPOAmount: 150000, totalPaid: 45000 },
-    { id: '2', name: 'Remodelación Oficinas Centrales', owner: 'Maria Garcia', currency: 'EUR', status: 'Active', totalPOAmount: 75000, totalPaid: 75000 },
+    { id: '1', name: 'Solar Power Plant A1', owner: 'Juan Pérez', currency: 'USD', status: 'Active', totalPOAmount: 150000, totalPaid: 45000 },
+    { id: '2', name: 'HQ Renovation', owner: 'Maria Garcia', currency: 'EUR', status: 'Active', totalPOAmount: 75000, totalPaid: 75000 },
 ];
 
 export const MOCK_POS: PurchaseOrder[] = [
-    { id: 'po1', poNumber: 'PO-2024-001', projectId: '1', supplierId: 's1', date: '2024-01-15', amount: 100000, currency: 'USD', status: 'In Progress', description: 'Suministro de Paneles Fotovoltaicos' },
-    { id: 'po2', poNumber: 'PO-2024-002', projectId: '1', supplierId: 's2', date: '2024-02-01', amount: 50000, currency: 'USD', status: 'Issued', description: 'Instalación Eléctrica' },
+    { id: 'po1', poNumber: 'PO-2024-001', projectId: '1', supplierId: 's1', date: '2024-01-15', amount: 100000, currency: 'USD', status: 'In Progress', description: 'Supply of PV Panels' },
+    { id: 'po2', poNumber: 'PO-2024-002', projectId: '1', supplierId: 's2', date: '2024-02-01', amount: 50000, currency: 'USD', status: 'Issued', description: 'Electrical Installation' },
 ];
 
 export const MOCK_SCHEDULES: PaymentSchedule[] = [

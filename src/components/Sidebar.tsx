@@ -3,17 +3,17 @@ import { LayoutDashboard, Briefcase, Receipt, PieChart, Settings, ShoppingCart }
 
 const SIDEBAR_ITEMS = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-    { name: "Proyectos", href: "/projects", icon: Briefcase },
+    { name: "Projects", href: "/projects", icon: Briefcase },
     { name: "Purchase Orders", href: "/pos", icon: ShoppingCart },
-    { name: "Pagos", href: "/payments", icon: Receipt },
-    { name: "Reportes", href: "/reports", icon: PieChart },
+    { name: "Payments", href: "/payments", icon: Receipt },
+    { name: "Reports", href: "/reports", icon: PieChart },
 ];
 
 export function Sidebar() {
     return (
-        <div className="flex h-screen w-64 flex-col border-r bg-zinc-50/50 dark:bg-zinc-950/50 backdrop-blur-xl">
-            <div className="flex h-16 items-center border-b px-6">
-                <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+        <div className="flex h-screen w-64 flex-col border-r border-border bg-card/50 backdrop-blur-xl">
+            <div className="flex h-16 items-center border-b border-border px-6">
+                <span className="text-xl font-bold bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent">
                     PO Master
                 </span>
             </div>
@@ -22,16 +22,16 @@ export function Sidebar() {
                     <Link
                         key={item.href}
                         href={item.href}
-                        className="flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50"
+                        className="flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground text-muted-foreground"
                     >
-                        <item.icon className="mr-3 h-5 w-5 text-zinc-500 dark:text-zinc-400" />
+                        <item.icon className="mr-3 h-5 w-5" />
                         {item.name}
                     </Link>
                 ))}
             </nav>
-            <div className="border-t p-3">
-                <button className="flex w-full items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-zinc-200/50 dark:hover:bg-zinc-800/50">
-                    <Settings className="mr-3 h-5 w-5 text-zinc-500 dark:text-zinc-400" />
+            <div className="border-t border-border p-3">
+                <button className="flex w-full items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground text-muted-foreground">
+                    <Settings className="mr-3 h-5 w-5" />
                     Settings
                 </button>
             </div>
