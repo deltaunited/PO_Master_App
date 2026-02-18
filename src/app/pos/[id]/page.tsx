@@ -1,129 +1,338 @@
 "use client";
 
-import { MOCK_POS, MOCK_SCHEDULES, PaymentSchedule } from "@/lib/mockData";
-import { Calendar, DollarSign, Download, Plus, Receipt, ShoppingCart, Tag } from "lucide-react";
-import { useState } from "react";
-import { RecordPaymentModal } from "@/components/RecordPaymentModal";
+import { createClient } from "@/lib/supabase/client";
+import { useEffect, useState } from "react";
+import { Calendar, DollarSign, Download, Plus, Receipt, ShoppingCart, Tag, ArrowLeft, X, Landmark } from "lucide-react";
+
+interface PurchaseOrder {
+    id: string;
+    po_number: string;
+    project_id: string;
+    supplier: string;
+    date: string;
+    amount: number;
+    status: string;
+    description: string;
+}
+
+interface PaymentSchedule {
+    id: string;
+    po_id: string;
+    payment_no: number;
+    type: string;
+    due_date: string;
+    amount: number;
+    status: string;
+}
+
+function RecordPaymentModal({ isOpen, onClose, schedule, poNumber, onSuccess }: {
+    isOpen: boolean;
+    onClose: () => void;
+    schedule: PaymentSchedule | null;
+    poNumber: string;
+    onSuccess: () => void;
+}) {
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [form, setForm] = useState({
+        amount: "",
+        date: new Date().toISOString().split("T")[0],
+        reference: "",
+        method: "Bank Transfer",
+        paid_by: "",
+    });
+
+    useEffect(() => {
+        if (schedule) setForm(f => ({ ...f, amount: String(schedule.amount) }));
+    }, [schedule]);
+
+    if (!isOpen || !schedule) return null;
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        setError(null);
+        try {
+            const supabase = createClient();
+            const { error: insertError } = await supabase.from("payments").insert({
+                schedule_id: schedule.id,
+                amount: parseFloat(form.amount),
+                date: form.date,
+                reference: form.reference,
+                method: form.method,
+                paid_by: form.paid_by,
+            });
+            if (insertError) throw insertError;
+
+            // Update schedule status to Paid
+            await supabase.from("payment_schedules").update({ status: "Paid" }).eq("id", schedule.id);
+
+            onSuccess();
+            onClose();
+        } catch (err: any) {
+            setError(err.message || "Failed to record payment.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="bg-card border border-border w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden">
+                <div className="flex items-center justify-between p-6 border-b border-border">
+                    <div>
+                        <h3 className="text-xl font-bold">Record Payment</h3>
+                        <p className="text-xs text-muted-foreground mt-0.5">For <span className="text-primary font-semibold">{poNumber}</span> — {schedule.type} #{schedule.payment_no}</p>
+                    </div>
+                    <button onClick={onClose} className="p-2 hover:bg-muted rounded-full transition-colors">
+                        <X className="h-5 w-5" />
+                    </button>
+                </div>
+                <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Amount Paid *</label>
+                            <div className="relative">
+                                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <input
+                                    required type="number" min="0" step="0.01"
+                                    value={form.amount}
+                                    onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
+                                    className="w-full bg-muted border border-border rounded-lg py-2.5 pl-9 pr-3 outline-none focus:ring-2 focus:ring-primary text-sm font-bold"
+                                />
+                            </div>
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Payment Date *</label>
+                            <div className="relative">
+                                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <input
+                                    required type="date"
+                                    value={form.date}
+                                    onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
+                                    className="w-full bg-muted border border-border rounded-lg py-2.5 pl-9 pr-3 outline-none focus:ring-2 focus:ring-primary text-sm"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Bank Reference (UTR / SWIFT) *</label>
+                        <div className="relative">
+                            <Landmark className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <input
+                                required type="text" placeholder="e.g. UTR-2024-8899"
+                                value={form.reference}
+                                onChange={e => setForm(f => ({ ...f, reference: e.target.value }))}
+                                className="w-full bg-muted border border-border rounded-lg py-2.5 pl-9 pr-3 outline-none focus:ring-2 focus:ring-primary text-sm"
+                            />
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Payment Method</label>
+                            <select
+                                value={form.method}
+                                onChange={e => setForm(f => ({ ...f, method: e.target.value }))}
+                                className="w-full bg-muted border border-border rounded-lg py-2.5 px-3 outline-none focus:ring-2 focus:ring-primary text-sm"
+                            >
+                                <option>Bank Transfer</option>
+                                <option>SWIFT</option>
+                                <option>Check</option>
+                                <option>Cash</option>
+                            </select>
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Paid By</label>
+                            <input
+                                type="text" placeholder="e.g. Finance Dept"
+                                value={form.paid_by}
+                                onChange={e => setForm(f => ({ ...f, paid_by: e.target.value }))}
+                                className="w-full bg-muted border border-border rounded-lg py-2.5 px-3 outline-none focus:ring-2 focus:ring-primary text-sm"
+                            />
+                        </div>
+                    </div>
+                    {error && <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">{error}</p>}
+                    <div className="pt-2 flex items-center space-x-3">
+                        <button type="button" onClick={onClose} className="flex-1 py-2.5 px-4 border border-border rounded-xl font-bold text-sm hover:bg-muted transition-colors">
+                            Cancel
+                        </button>
+                        <button type="submit" disabled={loading} className="flex-[2] py-2.5 px-4 bg-primary text-primary-foreground rounded-xl font-bold text-sm hover:bg-primary/90 transition-all disabled:opacity-50">
+                            {loading ? "Saving..." : "Confirm Payment"}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+}
+
+function StatSmall({ title, value, icon: Icon, color }: any) {
+    return (
+        <div className="rounded-xl border border-border bg-card p-4 flex items-center space-x-4 shadow-sm">
+            <div className={`p-2 rounded-lg bg-muted ${color}`}>
+                <Icon className="h-5 w-5" />
+            </div>
+            <div>
+                <p className="text-xs text-muted-foreground font-medium">{title}</p>
+                <p className="text-lg font-bold">{value}</p>
+            </div>
+        </div>
+    );
+}
 
 export default function PODetail({ params }: { params: { id: string } }) {
+    const [po, setPo] = useState<PurchaseOrder | null>(null);
+    const [schedules, setSchedules] = useState<PaymentSchedule[]>([]);
+    const [totalPaid, setTotalPaid] = useState(0);
+    const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedSchedule, setSelectedSchedule] = useState<PaymentSchedule | null>(null);
 
-    // Demo context: use po1
-    const po = MOCK_POS[0];
-    const schedules = MOCK_SCHEDULES.filter((s: PaymentSchedule) => s.poId === po.id);
+    const fetchData = async () => {
+        const supabase = createClient();
+        const [{ data: poData }, { data: schedulesData }, { data: paymentsData }] = await Promise.all([
+            supabase.from("purchase_orders").select("*").eq("id", params.id).single(),
+            supabase.from("payment_schedules").select("*").eq("po_id", params.id).order("payment_no"),
+            supabase.from("payments").select("amount, schedule_id"),
+        ]);
+        setPo(poData);
+        setSchedules(schedulesData || []);
+
+        // Calculate total paid for this PO's schedules
+        const scheduleIds = new Set((schedulesData || []).map((s: PaymentSchedule) => s.id));
+        const paid = (paymentsData || [])
+            .filter((p: any) => scheduleIds.has(p.schedule_id))
+            .reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
+        setTotalPaid(paid);
+        setLoading(false);
+    };
+
+    useEffect(() => { fetchData(); }, [params.id]);
 
     const handleOpenModal = (schedule: PaymentSchedule) => {
         setSelectedSchedule(schedule);
         setIsModalOpen(true);
     };
 
+    const scheduleStatusColors: Record<string, string> = {
+        "Paid": "text-emerald-600",
+        "Partial": "text-amber-600",
+        "Pending": "text-muted-foreground",
+    };
+
+    if (loading) {
+        return (
+            <div className="flex min-h-[400px] items-center justify-center">
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+            </div>
+        );
+    }
+
+    if (!po) {
+        return (
+            <div className="p-12 text-center border border-dashed border-border rounded-xl">
+                <h3 className="text-lg font-medium">Purchase Order not found</h3>
+                <a href="/pos" className="text-primary text-sm mt-2 inline-flex items-center hover:underline">
+                    <ArrowLeft className="mr-1 h-4 w-4" /> Back to Purchase Orders
+                </a>
+            </div>
+        );
+    }
+
+    const remaining = po.amount - totalPaid;
+
     return (
-        <div className="space-y-8 text-zinc-900 dark:text-zinc-100">
-            {/* Header */}
+        <div className="space-y-8">
             <div className="flex items-start justify-between">
                 <div className="space-y-1">
-                    <div className="flex items-center space-x-2">
-                        <h1 className="text-3xl font-bold tracking-tight">{po.poNumber}</h1>
-                        <span className="px-2 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-900/50 text-[10px] font-bold tracking-wider uppercase">
+                    <a href="/pos" className="text-sm text-muted-foreground hover:text-primary flex items-center mb-2 transition-colors">
+                        <ArrowLeft className="mr-1 h-4 w-4" /> Back to Purchase Orders
+                    </a>
+                    <div className="flex items-center space-x-3">
+                        <h1 className="text-3xl font-bold tracking-tight">{po.po_number}</h1>
+                        <span className="px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 text-[10px] font-bold tracking-wider uppercase">
                             {po.status}
                         </span>
                     </div>
-                    <p className="text-zinc-500">{po.description}</p>
+                    <p className="text-muted-foreground">{po.description || "No description provided."}</p>
                 </div>
-                <div className="flex space-x-3">
-                    <button className="flex items-center px-4 py-2 border rounded-lg text-sm font-medium hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors">
-                        <Download className="mr-2 h-4 w-4" /> Exportar PDF
-                    </button>
-                    <button className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors">
-                        Editar PO
-                    </button>
-                </div>
+                <button className="flex items-center px-4 py-2 border border-border rounded-lg text-sm font-medium hover:bg-muted transition-colors">
+                    <Download className="mr-2 h-4 w-4" /> Export PDF
+                </button>
             </div>
 
-            {/* Stats Cards */}
             <div className="grid gap-4 md:grid-cols-3">
-                <StatSmall title="Monto Total" value={`$${po.amount.toLocaleString()}`} icon={ShoppingCart} color="text-blue-600" />
-                <StatSmall title="Total Pagado" value="$45,000" icon={Receipt} color="text-emerald-600" />
-                <StatSmall title="Saldo Pendiente" value={`$${(po.amount - 45000).toLocaleString()}`} icon={DollarSign} color="text-amber-600" />
+                <StatSmall title="Total PO Amount" value={`$${po.amount.toLocaleString()}`} icon={ShoppingCart} color="text-primary" />
+                <StatSmall title="Total Paid" value={`$${totalPaid.toLocaleString()}`} icon={Receipt} color="text-emerald-600" />
+                <StatSmall title="Remaining Balance" value={`$${remaining.toLocaleString()}`} icon={DollarSign} color="text-amber-600" />
             </div>
 
-            {/* Main Content */}
             <div className="grid gap-8 lg:grid-cols-3">
                 <div className="lg:col-span-2 space-y-6">
-                    <div className="rounded-xl border shadow-sm bg-white dark:bg-zinc-900">
-                        <div className="flex items-center justify-between p-6 border-b">
-                            <h2 className="text-xl font-bold">Cronograma de Pagos</h2>
-                            <button className="text-xs font-semibold text-blue-600 flex items-center hover:underline">
-                                <Plus className="mr-1 h-3 w-3" /> Agregar Hito
+                    <div className="rounded-xl border border-border shadow-sm bg-card">
+                        <div className="flex items-center justify-between p-6 border-b border-border">
+                            <h2 className="text-xl font-bold">Payment Schedule</h2>
+                            <button className="text-xs font-semibold text-primary flex items-center hover:underline">
+                                <Plus className="mr-1 h-3 w-3" /> Add Milestone
                             </button>
                         </div>
-                        <div className="divide-y text-zinc-900 dark:text-zinc-100">
-                            {schedules.map((sch: PaymentSchedule) => (
-                                <div key={sch.id} className="p-6 flex items-center justify-between group hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors">
-                                    <div className="flex items-center space-x-4">
-                                        <div className="h-10 w-10 flex items-center justify-center rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 text-xs font-bold font-mono">
-                                            {sch.paymentNo}
+                        {schedules.length === 0 ? (
+                            <div className="p-12 text-center text-muted-foreground">
+                                <p className="font-medium">No payment schedule yet</p>
+                                <p className="text-sm mt-1">Add milestones to track payments for this PO.</p>
+                            </div>
+                        ) : (
+                            <div className="divide-y divide-border">
+                                {schedules.map((sch) => (
+                                    <div key={sch.id} className="p-6 flex items-center justify-between hover:bg-muted/30 transition-colors">
+                                        <div className="flex items-center space-x-4">
+                                            <div className="h-10 w-10 flex items-center justify-center rounded-full bg-muted text-muted-foreground text-xs font-bold font-mono">
+                                                {sch.payment_no}
+                                            </div>
+                                            <div>
+                                                <p className="font-semibold text-sm">{sch.type}</p>
+                                                <p className="text-xs text-muted-foreground flex items-center">
+                                                    <Calendar className="mr-1 h-3 w-3" /> {sch.due_date}
+                                                </p>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <p className="font-semibold text-sm">{sch.type}</p>
-                                            <p className="text-xs text-zinc-500 flex items-center">
-                                                <Calendar className="mr-1 h-3 w-3" /> {sch.dueDate}
-                                            </p>
+                                        <div className="flex items-center space-x-8 text-right">
+                                            <div>
+                                                <p className="text-sm font-bold">${sch.amount.toLocaleString()}</p>
+                                                <p className={`text-[10px] font-bold uppercase ${scheduleStatusColors[sch.status] || "text-muted-foreground"}`}>
+                                                    {sch.status}
+                                                </p>
+                                            </div>
+                                            {sch.status !== "Paid" && (
+                                                <button
+                                                    onClick={() => handleOpenModal(sch)}
+                                                    className="px-3 py-1.5 bg-primary text-primary-foreground rounded-md text-[10px] font-bold uppercase transition-all hover:bg-primary/90 hover:scale-105 active:scale-95"
+                                                >
+                                                    Record Payment
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
-                                    <div className="flex items-center space-x-8 text-right">
-                                        <div>
-                                            <p className="text-sm font-bold text-zinc-900 dark:text-zinc-100">${sch.amount.toLocaleString()}</p>
-                                            <p className={`text-[10px] font-bold uppercase ${sch.status === 'Paid' ? 'text-emerald-600' : sch.status === 'Partial' ? 'text-amber-600' : 'text-zinc-400'}`}>
-                                                {sch.status}
-                                            </p>
-                                        </div>
-                                        <button
-                                            onClick={() => handleOpenModal(sch)}
-                                            className="px-3 py-1.5 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 rounded-md text-[10px] font-bold uppercase transition-all hover:scale-105 active:scale-95"
-                                        >
-                                            Registrar Pago
-                                        </button>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
 
                 <div className="space-y-6">
-                    <div className="rounded-xl border bg-card p-6 shadow-sm">
-                        <h2 className="text-base font-bold mb-4">Detalles del Proveedor</h2>
+                    <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+                        <h2 className="text-base font-bold mb-4">Supplier Details</h2>
                         <div className="space-y-4 text-sm">
                             <div className="flex items-start">
-                                <Tag className="mr-2 h-4 w-4 text-zinc-400 mt-0.5" />
+                                <Tag className="mr-2 h-4 w-4 text-muted-foreground mt-0.5" />
                                 <div>
-                                    <p className="font-semibold">Suministros Globales S.A.</p>
-                                    <p className="text-xs text-zinc-500">Proveedor de equipo solar</p>
+                                    <p className="font-semibold">{po.supplier}</p>
+                                    <p className="text-xs text-muted-foreground">Supplier</p>
                                 </div>
                             </div>
-                            <div className="pt-4 border-t">
-                                <p className="text-[10px] text-zinc-500 font-bold uppercase mb-1">Cuentas Bancarias</p>
-                                <div className="bg-zinc-50 dark:bg-zinc-900 p-3 rounded text-xs font-mono border">
-                                    JP Morgan Chase<br />
-                                    Acc: ****5540<br />
-                                    SWIFT: JPMOXXXX
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="rounded-xl border bg-card p-6 shadow-sm">
-                        <h2 className="text-base font-bold mb-4">Documentos</h2>
-                        <div className="space-y-2">
-                            <div className="flex items-center justify-between p-2 rounded hover:bg-zinc-50 dark:hover:bg-zinc-800 text-xs text-zinc-600 dark:text-zinc-400 cursor-pointer">
-                                <span>po-signed.pdf</span>
-                                <Download className="h-3 w-3" />
-                            </div>
-                            <div className="flex items-center justify-between p-2 rounded hover:bg-zinc-50 dark:hover:bg-zinc-800 text-xs text-zinc-600 dark:text-zinc-400 cursor-pointer">
-                                <span>cotizacion.xlsx</span>
-                                <Download className="h-3 w-3" />
+                            <div className="pt-4 border-t border-border">
+                                <p className="text-[10px] text-muted-foreground font-bold uppercase mb-2">Issue Date</p>
+                                <p className="text-sm font-medium">{po.date}</p>
                             </div>
                         </div>
                     </div>
@@ -133,23 +342,10 @@ export default function PODetail({ params }: { params: { id: string } }) {
             <RecordPaymentModal
                 isOpen={isModalOpen}
                 onClose={() => setIsModalOpen(false)}
-                poNumber={po.poNumber}
-                remainingAmount={selectedSchedule?.amount}
+                schedule={selectedSchedule}
+                poNumber={po.po_number}
+                onSuccess={fetchData}
             />
-        </div>
-    );
-}
-
-function StatSmall({ title, value, icon: Icon, color }: any) {
-    return (
-        <div className="rounded-xl border bg-card p-4 flex items-center space-x-4 shadow-sm">
-            <div className={`p-2 rounded-lg bg-zinc-100 dark:bg-zinc-800 ${color}`}>
-                <Icon className="h-5 w-5" />
-            </div>
-            <div>
-                <p className="text-xs text-zinc-500 font-medium">{title}</p>
-                <p className="text-lg font-bold">{value}</p>
-            </div>
         </div>
     );
 }
