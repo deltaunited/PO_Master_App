@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/client";
 import { useEffect, useState } from "react";
-import { Calendar, ExternalLink, Filter, Receipt } from "lucide-react";
+import { Calendar, ExternalLink, Filter, Receipt, X, DollarSign, Landmark, Building2 } from "lucide-react";
 
 interface Payment {
     id: string;
@@ -17,38 +17,248 @@ interface Payment {
         payment_no: number;
         purchase_orders?: {
             po_number: string;
+            id: string;
         };
     };
+}
+
+interface PurchaseOrder {
+    id: string;
+    po_number: string;
+}
+
+interface PaymentSchedule {
+    id: string;
+    po_id: string;
+    type: string;
+    payment_no: number;
+    amount: number;
+    status: string;
+}
+
+function RegisterPaymentModal({ isOpen, onClose, onSuccess }: {
+    isOpen: boolean;
+    onClose: () => void;
+    onSuccess: () => void;
+}) {
+    const [pos, setPos] = useState<PurchaseOrder[]>([]);
+    const [schedules, setSchedules] = useState<PaymentSchedule[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [form, setForm] = useState({
+        po_id: "",
+        schedule_id: "",
+        amount: "",
+        date: new Date().toISOString().split("T")[0],
+        reference: "",
+        method: "Bank Transfer",
+        paid_by: "",
+    });
+
+    useEffect(() => {
+        if (!isOpen) return;
+        const fetchPOs = async () => {
+            const supabase = createClient();
+            const { data } = await supabase.from("purchase_orders").select("id, po_number").order("po_number");
+            setPos(data || []);
+        };
+        fetchPOs();
+        setForm({ po_id: "", schedule_id: "", amount: "", date: new Date().toISOString().split("T")[0], reference: "", method: "Bank Transfer", paid_by: "" });
+        setError(null);
+    }, [isOpen]);
+
+    useEffect(() => {
+        if (!form.po_id) { setSchedules([]); return; }
+        const fetchSchedules = async () => {
+            const supabase = createClient();
+            const { data } = await supabase
+                .from("payment_schedules")
+                .select("*")
+                .eq("po_id", form.po_id)
+                .neq("status", "Paid");
+            setSchedules(data || []);
+        };
+        fetchSchedules();
+    }, [form.po_id]);
+
+    useEffect(() => {
+        const sch = schedules.find(s => s.id === form.schedule_id);
+        if (sch) setForm(f => ({ ...f, amount: String(sch.amount) }));
+    }, [form.schedule_id]);
+
+    if (!isOpen) return null;
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        setError(null);
+        try {
+            const supabase = createClient();
+            const { error: insertError } = await supabase.from("payments").insert({
+                schedule_id: form.schedule_id || null,
+                amount: parseFloat(form.amount),
+                date: form.date,
+                reference: form.reference,
+                method: form.method,
+                paid_by: form.paid_by,
+            });
+            if (insertError) throw insertError;
+            if (form.schedule_id) {
+                await supabase.from("payment_schedules").update({ status: "Paid" }).eq("id", form.schedule_id);
+            }
+            onSuccess();
+            onClose();
+        } catch (err: any) {
+            setError(err.message || "Failed to register payment.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <div className="bg-card border border-border w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden">
+                <div className="flex items-center justify-between p-6 border-b border-border">
+                    <div>
+                        <h3 className="text-xl font-bold">Register Payment</h3>
+                        <p className="text-xs text-muted-foreground mt-0.5">Record a new payment transaction</p>
+                    </div>
+                    <button onClick={onClose} className="p-2 hover:bg-muted rounded-full transition-colors">
+                        <X className="h-5 w-5" />
+                    </button>
+                </div>
+                <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Purchase Order</label>
+                        <div className="relative">
+                            <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <select
+                                value={form.po_id}
+                                onChange={e => setForm(f => ({ ...f, po_id: e.target.value, schedule_id: "" }))}
+                                className="w-full bg-muted border border-border rounded-lg py-2.5 pl-9 pr-3 outline-none focus:ring-2 focus:ring-primary text-sm"
+                            >
+                                <option value="">— Select PO —</option>
+                                {pos.map(po => <option key={po.id} value={po.id}>{po.po_number}</option>)}
+                            </select>
+                        </div>
+                    </div>
+
+                    {schedules.length > 0 && (
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Payment Milestone</label>
+                            <select
+                                value={form.schedule_id}
+                                onChange={e => setForm(f => ({ ...f, schedule_id: e.target.value }))}
+                                className="w-full bg-muted border border-border rounded-lg py-2.5 px-3 outline-none focus:ring-2 focus:ring-primary text-sm"
+                            >
+                                <option value="">— Select Milestone —</option>
+                                {schedules.map(s => (
+                                    <option key={s.id} value={s.id}>
+                                        #{s.payment_no} — {s.type} (${s.amount.toLocaleString()})
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Amount Paid *</label>
+                            <div className="relative">
+                                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <input
+                                    required type="number" min="0" step="0.01"
+                                    value={form.amount}
+                                    onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
+                                    className="w-full bg-muted border border-border rounded-lg py-2.5 pl-9 pr-3 outline-none focus:ring-2 focus:ring-primary text-sm font-bold"
+                                    placeholder="0.00"
+                                />
+                            </div>
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Payment Date *</label>
+                            <div className="relative">
+                                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <input
+                                    required type="date"
+                                    value={form.date}
+                                    onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
+                                    className="w-full bg-muted border border-border rounded-lg py-2.5 pl-9 pr-3 outline-none focus:ring-2 focus:ring-primary text-sm"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Bank Reference *</label>
+                        <div className="relative">
+                            <Landmark className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <input
+                                required type="text" placeholder="e.g. UTR-2024-8899"
+                                value={form.reference}
+                                onChange={e => setForm(f => ({ ...f, reference: e.target.value }))}
+                                className="w-full bg-muted border border-border rounded-lg py-2.5 pl-9 pr-3 outline-none focus:ring-2 focus:ring-primary text-sm"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Method</label>
+                            <select
+                                value={form.method}
+                                onChange={e => setForm(f => ({ ...f, method: e.target.value }))}
+                                className="w-full bg-muted border border-border rounded-lg py-2.5 px-3 outline-none focus:ring-2 focus:ring-primary text-sm"
+                            >
+                                <option>Bank Transfer</option>
+                                <option>SWIFT</option>
+                                <option>Check</option>
+                                <option>Cash</option>
+                            </select>
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Paid By</label>
+                            <input
+                                type="text" placeholder="e.g. Finance Dept"
+                                value={form.paid_by}
+                                onChange={e => setForm(f => ({ ...f, paid_by: e.target.value }))}
+                                className="w-full bg-muted border border-border rounded-lg py-2.5 px-3 outline-none focus:ring-2 focus:ring-primary text-sm"
+                            />
+                        </div>
+                    </div>
+
+                    {error && <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">{error}</p>}
+                    <div className="pt-2 flex items-center space-x-3">
+                        <button type="button" onClick={onClose} className="flex-1 py-2.5 px-4 border border-border rounded-xl font-bold text-sm hover:bg-muted transition-colors">
+                            Cancel
+                        </button>
+                        <button type="submit" disabled={loading} className="flex-[2] py-2.5 px-4 bg-primary text-primary-foreground rounded-xl font-bold text-sm hover:bg-primary/90 transition-all disabled:opacity-50">
+                            {loading ? "Saving..." : "Confirm Payment"}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
 }
 
 export default function Payments() {
     const [payments, setPayments] = useState<Payment[]>([]);
     const [loading, setLoading] = useState(true);
+    const [isModalOpen, setIsModalOpen] = useState(false);
 
-    useEffect(() => {
-        const fetchPayments = async () => {
-            const supabase = createClient();
-            const { data, error } = await supabase
-                .from("payments")
-                .select(`
-                    *,
-                    payment_schedules (
-                        type,
-                        payment_no,
-                        purchase_orders (
-                            po_number
-                        )
-                    )
-                `)
-                .order("date", { ascending: false });
+    const fetchPayments = async () => {
+        const supabase = createClient();
+        const { data, error } = await supabase
+            .from("payments")
+            .select(`*, payment_schedules (type, payment_no, purchase_orders (po_number, id))`)
+            .order("date", { ascending: false });
+        if (error) console.error("Error fetching payments:", error);
+        setPayments(data || []);
+        setLoading(false);
+    };
 
-            if (error) console.error("Error fetching payments:", error);
-            setPayments(data || []);
-            setLoading(false);
-        };
-
-        fetchPayments();
-    }, []);
+    useEffect(() => { fetchPayments(); }, []);
 
     return (
         <div className="space-y-6">
@@ -61,6 +271,12 @@ export default function Payments() {
                     <button className="flex items-center px-4 py-2 border border-border rounded-lg text-sm font-medium hover:bg-muted transition-colors">
                         <Filter className="mr-2 h-4 w-4" /> Filters
                     </button>
+                    <button
+                        onClick={() => setIsModalOpen(true)}
+                        className="flex items-center px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors shadow-sm"
+                    >
+                        + Register Payment
+                    </button>
                 </div>
             </div>
 
@@ -72,9 +288,7 @@ export default function Payments() {
                 <div className="p-16 text-center border border-dashed border-border rounded-xl">
                     <Receipt className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
                     <h3 className="text-lg font-medium">No payments recorded yet</h3>
-                    <p className="text-muted-foreground text-sm mt-1">
-                        Go to a Purchase Order and click "Record Payment" to register a transaction.
-                    </p>
+                    <p className="text-muted-foreground text-sm mt-1">Click "+ Register Payment" to record a transaction.</p>
                 </div>
             ) : (
                 <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
@@ -105,15 +319,15 @@ export default function Payments() {
                                                 {payment.payment_schedules?.purchase_orders?.po_number || "—"}
                                             </span>
                                             <span className="text-[10px] text-muted-foreground uppercase tracking-tight">
-                                                {payment.payment_schedules?.type} #{payment.payment_schedules?.payment_no}
+                                                {payment.payment_schedules
+                                                    ? `${payment.payment_schedules.type} #${payment.payment_schedules.payment_no}`
+                                                    : "Manual payment"}
                                             </span>
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 font-mono text-muted-foreground">{payment.reference}</td>
                                     <td className="px-6 py-4">{payment.method}</td>
-                                    <td className="px-6 py-4 font-bold text-emerald-600 dark:text-emerald-400">
-                                        ${payment.amount?.toLocaleString()}
-                                    </td>
+                                    <td className="px-6 py-4 font-bold text-emerald-400">${payment.amount?.toLocaleString()}</td>
                                     <td className="px-6 py-4 text-muted-foreground">{payment.paid_by || "—"}</td>
                                     <td className="px-6 py-4">
                                         <button className="flex items-center text-primary font-semibold text-xs hover:underline">
@@ -126,6 +340,12 @@ export default function Payments() {
                     </table>
                 </div>
             )}
+
+            <RegisterPaymentModal
+                isOpen={isModalOpen}
+                onClose={() => setIsModalOpen(false)}
+                onSuccess={fetchPayments}
+            />
         </div>
     );
 }
