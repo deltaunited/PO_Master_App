@@ -8,54 +8,97 @@ import { useEffect, useState } from "react";
 export default function Projects() {
     const [projects, setProjects] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchProjects = async () => {
-            const supabase = createClient();
+            try {
+                // Check if environment variables are set
+                if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+                    throw new Error("Missing Supabase environment variables. Please check your .env.local or Vercel settings.");
+                }
 
-            // 1. Fetch projects
-            const { data: projectsData, error } = await supabase
-                .from('projects')
-                .select('*');
+                const supabase = createClient();
 
-            if (error) {
-                console.error('Error fetching projects:', error);
+                // 1. Fetch projects
+                const { data: projectsData, error } = await supabase
+                    .from('projects')
+                    .select('*');
+
+                if (error) throw error;
+
+                if (!projectsData) {
+                    setProjects([]);
+                    setLoading(false);
+                    return;
+                }
+
+                // 2. Fetch stats manually
+                const projectsWithStats = await Promise.all(projectsData.map(async (project) => {
+                    try {
+                        const { data: pos } = await supabase
+                            .from('purchase_orders')
+                            .select('amount, id')
+                            .eq('project_id', project.id);
+
+                        const totalPOAmount = pos?.reduce((sum, po) => sum + (po.amount || 0), 0) || 0;
+
+                        return {
+                            ...project,
+                            totalPOAmount: totalPOAmount,
+                            totalPaid: 0
+                        };
+                    } catch (e) {
+                        console.error('Error fetching stats for project:', project.id, e);
+                        return { ...project, totalPOAmount: 0, totalPaid: 0 };
+                    }
+                }));
+
+                setProjects(projectsWithStats);
+            } catch (err: any) {
+                console.error('Database connection error:', err);
+                setErrorMsg(err.message || "Failed to connect to Supabase database.");
+            } finally {
                 setLoading(false);
-                return;
             }
-
-            // 2. Fetch stats manually since we might not have the view created yet
-            // Or we can just fetch raw data and aggregate in JS for now to be safe
-            // Let's use a simpler approach for the first connection test
-            const projectsWithStats = await Promise.all(projectsData.map(async (project) => {
-                // Get total PO amount
-                const { data: pos } = await supabase
-                    .from('purchase_orders')
-                    .select('amount, id')
-                    .eq('project_id', project.id);
-
-                const totalPOAmount = pos?.reduce((sum, po) => sum + (po.amount || 0), 0) || 0;
-
-                // Get total Paid amount (simplified: sum of payments linked to POs of this project)
-                // This is a bit complex without a view, so for the first "Hello World" of DB, 
-                // let's just show the project details and 0 for amounts if no POs exist.
-
-                return {
-                    ...project,
-                    totalPOAmount: totalPOAmount,
-                    totalPaid: 0 // Placeholder until we do the full join logic or view
-                };
-            }));
-
-            setProjects(projectsWithStats);
-            setLoading(false);
         };
 
         fetchProjects();
     }, []);
 
     if (loading) {
-        return <div className="p-8 text-center text-muted-foreground">Loading projects from Supabase...</div>;
+        return (
+            <div className="flex min-h-[400px] flex-col items-center justify-center space-y-4">
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+                <p className="text-muted-foreground animate-pulse">Connecting to Supabase...</p>
+            </div>
+        );
+    }
+
+    if (errorMsg) {
+        return (
+            <div className="p-12 text-center bg-destructive/5 rounded-xl border border-destructive/20 max-w-2xl mx-auto mt-10">
+                <div className="h-12 w-12 bg-destructive/10 text-destructive rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Circle className="h-6 w-6 fill-current" />
+                </div>
+                <h3 className="text-xl font-bold text-destructive mb-2">Connection Error</h3>
+                <p className="text-muted-foreground mb-6 font-mono text-sm">{errorMsg}</p>
+                <div className="flex justify-center space-x-3">
+                    <button
+                        onClick={() => window.location.reload()}
+                        className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold"
+                    >
+                        Retry Connection
+                    </button>
+                    <a
+                        href="/"
+                        className="px-4 py-2 border border-border rounded-lg text-sm font-semibold hover:bg-zinc-50"
+                    >
+                        Back to Dashboard
+                    </a>
+                </div>
+            </div>
+        );
     }
 
     if (projects.length === 0) {
