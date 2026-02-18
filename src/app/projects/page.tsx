@@ -1,3 +1,5 @@
+"use client";
+
 import { Project } from "@/lib/mockData";
 import { Briefcase, User, Circle, ArrowUpRight, DollarSign } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
