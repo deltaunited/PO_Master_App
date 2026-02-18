@@ -1,7 +1,77 @@
-import { MOCK_PROJECTS, Project } from "@/lib/mockData";
-import { Briefcase, User, Circle, ArrowUpRight, Calendar, DollarSign } from "lucide-react";
+import { Project } from "@/lib/mockData";
+import { Briefcase, User, Circle, ArrowUpRight, DollarSign } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+import { useEffect, useState } from "react";
 
 export default function Projects() {
+    const [projects, setProjects] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchProjects = async () => {
+            const supabase = createClient();
+
+            // 1. Fetch projects
+            const { data: projectsData, error } = await supabase
+                .from('projects')
+                .select('*');
+
+            if (error) {
+                console.error('Error fetching projects:', error);
+                setLoading(false);
+                return;
+            }
+
+            // 2. Fetch stats manually since we might not have the view created yet
+            // Or we can just fetch raw data and aggregate in JS for now to be safe
+            // Let's use a simpler approach for the first connection test
+            const projectsWithStats = await Promise.all(projectsData.map(async (project) => {
+                // Get total PO amount
+                const { data: pos } = await supabase
+                    .from('purchase_orders')
+                    .select('amount, id')
+                    .eq('project_id', project.id);
+
+                const totalPOAmount = pos?.reduce((sum, po) => sum + (po.amount || 0), 0) || 0;
+
+                // Get total Paid amount (simplified: sum of payments linked to POs of this project)
+                // This is a bit complex without a view, so for the first "Hello World" of DB, 
+                // let's just show the project details and 0 for amounts if no POs exist.
+
+                return {
+                    ...project,
+                    totalPOAmount: totalPOAmount,
+                    totalPaid: 0 // Placeholder until we do the full join logic or view
+                };
+            }));
+
+            setProjects(projectsWithStats);
+            setLoading(false);
+        };
+
+        fetchProjects();
+    }, []);
+
+    if (loading) {
+        return <div className="p-8 text-center text-muted-foreground">Loading projects from Supabase...</div>;
+    }
+
+    if (projects.length === 0) {
+        return (
+            <div className="space-y-8">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h1 className="text-3xl font-bold tracking-tight">Projects</h1>
+                        <p className="text-muted-foreground mt-1">List of active projects and financial status.</p>
+                    </div>
+                </div>
+                <div className="p-12 text-center border border-dashed rounded-xl">
+                    <h3 className="text-lg font-medium">No projects found in database</h3>
+                    <p className="text-muted-foreground">Add a row to the 'projects' table in Supabase to see it here.</p>
+                </div>
+            </div>
+        )
+    }
     return (
         <div className="space-y-8">
             <div className="flex items-center justify-between">
@@ -15,7 +85,7 @@ export default function Projects() {
             </div>
 
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {MOCK_PROJECTS.map((project: Project) => (
+                {projects.map((project: Project) => (
                     <div key={project.id} className="group overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-sm hover:shadow-md hover:border-primary/20 transition-all duration-300">
                         <div className="p-6">
                             <div className="flex items-start justify-between mb-6">
@@ -79,6 +149,6 @@ export default function Projects() {
                     </div>
                 ))}
             </div>
-        </div>
+        </div >
     );
 }
