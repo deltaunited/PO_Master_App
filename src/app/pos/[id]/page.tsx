@@ -8,7 +8,8 @@ interface PurchaseOrder {
     id: string;
     po_number: string;
     project_id: string;
-    supplier: string;
+    supplier_name: string;
+    currency: string;
     date: string;
     amount: number;
     status: string;
@@ -262,9 +263,9 @@ export default function PODetail({ params }: { params: { id: string } }) {
             </div>
 
             <div className="grid gap-4 md:grid-cols-3">
-                <StatSmall title="Total PO Amount" value={`$${po.amount.toLocaleString()}`} icon={ShoppingCart} color="text-primary" />
-                <StatSmall title="Total Paid" value={`$${totalPaid.toLocaleString()}`} icon={Receipt} color="text-emerald-600" />
-                <StatSmall title="Remaining Balance" value={`$${remaining.toLocaleString()}`} icon={DollarSign} color="text-amber-600" />
+                <StatSmall title="Total PO Amount" value={`${po.currency} ${po.amount.toLocaleString()}`} icon={ShoppingCart} color="text-primary" />
+                <StatSmall title="Total Paid" value={`${po.currency} ${totalPaid.toLocaleString()}`} icon={Receipt} color="text-emerald-600" />
+                <StatSmall title="Remaining Balance" value={`${po.currency} ${remaining.toLocaleString()}`} icon={DollarSign} color="text-amber-600" />
             </div>
 
             <div className="grid gap-8 lg:grid-cols-3">
@@ -298,7 +299,7 @@ export default function PODetail({ params }: { params: { id: string } }) {
                                         </div>
                                         <div className="flex items-center space-x-8 text-right">
                                             <div>
-                                                <p className="text-sm font-bold">${sch.amount.toLocaleString()}</p>
+                                                <p className="text-sm font-bold">{po.currency} {sch.amount.toLocaleString()}</p>
                                                 <p className={`text-[10px] font-bold uppercase ${scheduleStatusColors[sch.status] || "text-muted-foreground"}`}>
                                                     {sch.status}
                                                 </p>
@@ -326,7 +327,7 @@ export default function PODetail({ params }: { params: { id: string } }) {
                             <div className="flex items-start">
                                 <Tag className="mr-2 h-4 w-4 text-muted-foreground mt-0.5" />
                                 <div>
-                                    <p className="font-semibold">{po.supplier}</p>
+                                    <p className="font-semibold">{po.supplier_name}</p>
                                     <p className="text-xs text-muted-foreground">Supplier</p>
                                 </div>
                             </div>
