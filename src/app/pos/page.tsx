@@ -17,6 +17,7 @@ interface PurchaseOrder {
     currency: string;
     status: string;
     description: string;
+    external_link?: string;
     suppliers?: { name: string };
 }
 
@@ -66,6 +67,7 @@ function NewPOModal({ isOpen, onClose, projects, suppliers, currencies, onSucces
         currency: currencies.length > 0 ? currencies[0].code : "USD",
         description: "",
         status: "Issued",
+        external_link: "",
     });
     const [scheduleRows, setScheduleRows] = useState<ScheduleRow[]>([
         { type: "Advance", percentage: "30", due_date: "" },
@@ -78,7 +80,7 @@ function NewPOModal({ isOpen, onClose, projects, suppliers, currencies, onSucces
                 po_number: "", project_id: "", supplier_id: "",
                 date: new Date().toISOString().split("T")[0],
                 amount: "", currency: currencies.length > 0 ? currencies[0].code : "USD",
-                description: "", status: "Issued"
+                description: "", status: "Issued", external_link: ""
             });
             setScheduleRows([{ type: "Advance", percentage: "30", due_date: "" }, { type: "Final", percentage: "70", due_date: "" }]);
             setError(null);
@@ -121,6 +123,7 @@ function NewPOModal({ isOpen, onClose, projects, suppliers, currencies, onSucces
                     currency: form.currency,
                     description: form.description,
                     status: form.status,
+                    external_link: form.external_link ? form.external_link : null,
                 })
                 .select()
                 .single();
@@ -265,6 +268,16 @@ function NewPOModal({ isOpen, onClose, projects, suppliers, currencies, onSucces
                             </div>
                         </div>
 
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">External Link <span className="text-muted-foreground/50 font-normal">(Optional)</span></label>
+                            <input
+                                type="url" placeholder="https://drive.google.com/..."
+                                value={form.external_link}
+                                onChange={e => setForm(f => ({ ...f, external_link: e.target.value }))}
+                                className="w-full bg-muted border border-border rounded-lg py-2.5 px-3 outline-none focus:ring-2 focus:ring-primary text-sm"
+                            />
+                        </div>
+
                         {/* Payment Schedule Builder */}
                         <div className="pt-2">
                             <div className="flex items-center justify-between mb-3">
@@ -374,7 +387,7 @@ function EditPOModal({ po, projects, suppliers, currencies, onClose, onSuccess }
 }) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [form, setForm] = useState({ po_number: "", project_id: "", supplier_id: "", date: "", amount: "", currency: "USD", description: "", status: "Issued" });
+    const [form, setForm] = useState({ po_number: "", project_id: "", supplier_id: "", date: "", amount: "", currency: "USD", description: "", status: "Issued", external_link: "" });
 
     useEffect(() => {
         if (po) {
@@ -386,7 +399,8 @@ function EditPOModal({ po, projects, suppliers, currencies, onClose, onSuccess }
                 amount: String(po.amount),
                 currency: po.currency,
                 description: po.description || "",
-                status: po.status
+                status: po.status,
+                external_link: po.external_link || ""
             });
         }
         setError(null);
@@ -410,6 +424,7 @@ function EditPOModal({ po, projects, suppliers, currencies, onClose, onSuccess }
                 currency: form.currency,
                 description: form.description,
                 status: form.status,
+                external_link: form.external_link ? form.external_link : null,
             }).eq("id", po.id);
             if (updateError) throw updateError;
             onSuccess();
@@ -482,6 +497,10 @@ function EditPOModal({ po, projects, suppliers, currencies, onClose, onSuccess }
                         <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Description</label>
                         <div className="relative"><FileText className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                             <textarea rows={2} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className="w-full bg-muted border border-border rounded-lg py-2.5 pl-9 pr-3 outline-none focus:ring-2 focus:ring-primary text-sm resize-none" /></div>
+                    </div>
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">External Link <span className="text-muted-foreground/50 font-normal">(Optional)</span></label>
+                        <input type="url" placeholder="https://..." value={form.external_link} onChange={e => setForm(f => ({ ...f, external_link: e.target.value }))} className="w-full bg-muted border border-border rounded-lg py-2.5 px-3 outline-none focus:ring-2 focus:ring-primary text-sm" />
                     </div>
                     {error && <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">{error}</p>}
                     <div className="pt-2 flex items-center space-x-3">

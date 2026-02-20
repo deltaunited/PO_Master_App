@@ -16,6 +16,7 @@ interface PurchaseOrder {
     description: string;
     suppliers?: { name: string };
     signed_po_url?: string;
+    external_link?: string;
 }
 
 interface PaymentSchedule {
@@ -298,7 +299,7 @@ export default function PODetail({ params }: { params: { id: string } }) {
                 </div>
                 <div className="flex gap-2">
                     {po.signed_po_url ? (
-                        <a href={po.signed_po_url} target="_blank" rel="noreferrer" className="flex items-center px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors shadow-sm">
+                        <a href={po.signed_po_url} target="_blank" rel="noreferrer" className="flex items-center px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors shadow-sm cursor-pointer border-transparent">
                             <FileText className="mr-2 h-4 w-4" /> View Signed PO
                         </a>
                     ) : (
@@ -307,6 +308,11 @@ export default function PODetail({ params }: { params: { id: string } }) {
                             {uploading ? "Uploading..." : "Upload Signed PO"}
                             <input type="file" className="hidden" accept=".pdf,.png,.jpg,.jpeg" onChange={handleFileUpload} disabled={uploading} />
                         </label>
+                    )}
+                    {po.external_link && (
+                        <a href={po.external_link} target="_blank" rel="noreferrer" className="flex items-center px-4 py-2 border border-primary/20 text-primary rounded-lg text-sm font-bold bg-primary/10 hover:bg-primary/20 transition-colors shadow-sm">
+                            <ArrowLeft strokeWidth={3} className="mr-2 h-4 w-4 rotate-[135deg]" /> External Link
+                        </a>
                     )}
                     <button className="flex items-center px-4 py-2 border border-border rounded-lg text-sm font-medium hover:bg-muted transition-colors bg-card shadow-sm">
                         <Download className="mr-2 h-4 w-4" /> Export PDF

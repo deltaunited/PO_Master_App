@@ -1,5 +1,6 @@
--- 1. Add columns for file URLs
+-- 1. Add columns for file URLs and external links
 ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS signed_po_url TEXT;
+ALTER TABLE public.purchase_orders ADD COLUMN IF NOT EXISTS external_link TEXT;
 ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS invoice_url TEXT;
 
 -- 2. Set up Storage Bucket
