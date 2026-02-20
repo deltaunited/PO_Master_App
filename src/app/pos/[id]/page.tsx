@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/client";
 import { useEffect, useState } from "react";
-import { Calendar, DollarSign, Download, Plus, Receipt, ShoppingCart, Tag, ArrowLeft, X, Landmark } from "lucide-react";
+import { Calendar, DollarSign, Download, Plus, Receipt, ShoppingCart, Tag, ArrowLeft, X, Landmark, Upload, FileText } from "lucide-react";
 
 interface PurchaseOrder {
     id: string;
@@ -15,6 +15,7 @@ interface PurchaseOrder {
     status: string;
     description: string;
     suppliers?: { name: string };
+    signed_po_url?: string;
 }
 
 interface PaymentSchedule {
@@ -187,6 +188,7 @@ export default function PODetail({ params }: { params: { id: string } }) {
     const [schedules, setSchedules] = useState<PaymentSchedule[]>([]);
     const [totalPaid, setTotalPaid] = useState(0);
     const [loading, setLoading] = useState(true);
+    const [uploading, setUploading] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedSchedule, setSelectedSchedule] = useState<PaymentSchedule | null>(null);
 
@@ -214,6 +216,42 @@ export default function PODetail({ params }: { params: { id: string } }) {
     const handleOpenModal = (schedule: PaymentSchedule) => {
         setSelectedSchedule(schedule);
         setIsModalOpen(true);
+    };
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !po) return;
+
+        setUploading(true);
+        try {
+            const supabase = createClient();
+
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${po.id}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
+            const { error: uploadError } = await supabase.storage
+                .from('documents')
+                .upload(`pos/${fileName}`, file);
+
+            if (uploadError) throw uploadError;
+
+            const { data: { publicUrl } } = supabase.storage
+                .from('documents')
+                .getPublicUrl(`pos/${fileName}`);
+
+            const { error: dbError } = await supabase
+                .from('purchase_orders')
+                .update({ signed_po_url: publicUrl })
+                .eq('id', po.id);
+
+            if (dbError) throw dbError;
+
+            setPo(prev => prev ? { ...prev, signed_po_url: publicUrl } : null);
+        } catch (error) {
+            console.error('Error uploading:', error);
+            alert('Failed to upload file. Please ensure storage bucket is configured properly.');
+        } finally {
+            setUploading(false);
+        }
     };
 
     const scheduleStatusColors: Record<string, string> = {
@@ -258,9 +296,22 @@ export default function PODetail({ params }: { params: { id: string } }) {
                     </div>
                     <p className="text-muted-foreground">{po.description || "No description provided."}</p>
                 </div>
-                <button className="flex items-center px-4 py-2 border border-border rounded-lg text-sm font-medium hover:bg-muted transition-colors">
-                    <Download className="mr-2 h-4 w-4" /> Export PDF
-                </button>
+                <div className="flex gap-2">
+                    {po.signed_po_url ? (
+                        <a href={po.signed_po_url} target="_blank" rel="noreferrer" className="flex items-center px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors shadow-sm">
+                            <FileText className="mr-2 h-4 w-4" /> View Signed PO
+                        </a>
+                    ) : (
+                        <label className="flex items-center px-4 py-2 border border-border rounded-lg text-sm font-medium hover:bg-muted transition-colors cursor-pointer bg-card shadow-sm">
+                            <Upload className="mr-2 h-4 w-4" />
+                            {uploading ? "Uploading..." : "Upload Signed PO"}
+                            <input type="file" className="hidden" accept=".pdf,.png,.jpg,.jpeg" onChange={handleFileUpload} disabled={uploading} />
+                        </label>
+                    )}
+                    <button className="flex items-center px-4 py-2 border border-border rounded-lg text-sm font-medium hover:bg-muted transition-colors bg-card shadow-sm">
+                        <Download className="mr-2 h-4 w-4" /> Export PDF
+                    </button>
+                </div>
             </div>
 
             <div className="grid gap-4 md:grid-cols-3">

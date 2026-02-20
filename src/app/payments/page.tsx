@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/client";
 import { useEffect, useState } from "react";
-import { Calendar, ExternalLink, Filter, Receipt, X, DollarSign, Landmark, Building2, Pencil, Trash2 } from "lucide-react";
+import { Calendar, ExternalLink, Filter, Receipt, X, DollarSign, Landmark, Building2, Pencil, Trash2, Upload, FileText } from "lucide-react";
 
 interface Payment {
     id: string;
@@ -20,6 +20,7 @@ interface Payment {
             id: string;
         };
     };
+    invoice_url?: string;
 }
 
 interface PurchaseOrder {
@@ -249,6 +250,7 @@ function EditPaymentModal({ payment, isOpen, onClose, onSuccess }: {
     onSuccess: () => void;
 }) {
     const [loading, setLoading] = useState(false);
+    const [uploading, setUploading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [form, setForm] = useState({
         amount: "",
@@ -292,6 +294,29 @@ function EditPaymentModal({ payment, isOpen, onClose, onSuccess }: {
             setError(err.message || "Failed to update payment.");
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !payment) return;
+        setUploading(true);
+        try {
+            const supabase = createClient();
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${payment.id}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
+            const { error: uploadError } = await supabase.storage.from('documents').upload(`invoices/${fileName}`, file);
+            if (uploadError) throw uploadError;
+            const { data: { publicUrl } } = supabase.storage.from('documents').getPublicUrl(`invoices/${fileName}`);
+            const { error: dbError } = await supabase.from('payments').update({ invoice_url: publicUrl }).eq('id', payment.id);
+            if (dbError) throw dbError;
+            onSuccess();
+            onClose();
+        } catch (error) {
+            console.error('Error uploading:', error);
+            alert('Failed to upload file.');
+        } finally {
+            setUploading(false);
         }
     };
 
@@ -458,7 +483,7 @@ export default function Payments() {
                                 <th className="px-6 py-4">Reference</th>
                                 <th className="px-6 py-4">Method</th>
                                 <th className="px-6 py-4">Amount Paid</th>
-                                <th className="px-6 py-4">Registered By</th>
+                                <th className="px-6 py-4">Invoice</th>
                                 <th className="px-6 py-4">Actions</th>
                             </tr>
                         </thead>
@@ -486,7 +511,15 @@ export default function Payments() {
                                     <td className="px-6 py-4 font-mono text-muted-foreground">{payment.reference}</td>
                                     <td className="px-6 py-4">{payment.method}</td>
                                     <td className="px-6 py-4 font-bold text-emerald-400">${payment.amount?.toLocaleString()}</td>
-                                    <td className="px-6 py-4 text-muted-foreground">{payment.paid_by || "—"}</td>
+                                    <td className="px-6 py-4">
+                                        {payment.invoice_url ? (
+                                            <a href={payment.invoice_url} target="_blank" rel="noreferrer" className="text-primary hover:underline flex items-center text-xs font-medium">
+                                                <ExternalLink className="h-3 w-3 mr-1" /> View
+                                            </a>
+                                        ) : (
+                                            <span className="text-muted-foreground/50 text-xs">—</span>
+                                        )}
+                                    </td>
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-1">
                                             <button onClick={() => setEditingPayment(payment)} className="p-1.5 hover:bg-muted rounded-lg transition-colors" title="Edit Payment">

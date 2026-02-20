@@ -1,6 +1,18 @@
-import { Bell, Search, User } from "lucide-react";
+"use client";
+
+import { Bell, Search, User, LogOut } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+import { useRouter } from "next/navigation";
 
 export function Navbar() {
+    const router = useRouter();
+
+    const handleLogout = async () => {
+        const supabase = createClient();
+        await supabase.auth.signOut();
+        router.refresh();
+        router.push("/login");
+    };
     return (
         <header className="flex h-16 items-center justify-between border-b border-border px-8 bg-card/50 backdrop-blur-md sticky top-0 z-10">
             <div className="flex w-96 items-center rounded-full bg-accent/50 px-4 py-2 border border-border/50 focus-within:border-primary/50 transition-colors">
@@ -20,6 +32,9 @@ export function Navbar() {
                         <User className="h-4 w-4 text-primary-foreground" />
                     </div>
                     <div className="text-sm font-medium text-foreground">David H.</div>
+                    <button onClick={handleLogout} className="ml-4 rounded-full p-2 hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors title='Sign Out'">
+                        <LogOut className="h-5 w-5" />
+                    </button>
                 </div>
             </div>
         </header>
