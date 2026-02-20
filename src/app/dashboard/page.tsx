@@ -29,7 +29,6 @@ export default function Dashboard() {
                 const { data: projectsData, error: projectsError } = await supabase
                     .from("projects")
                     .select("*")
-                    .order("created_at", { ascending: false })
                     .limit(5);
 
                 if (projectsError) throw projectsError;
@@ -41,14 +40,21 @@ export default function Dashboard() {
 
                 if (posError) throw posError;
 
-                // 3. Fetch all payments + currency (joined thru PO)
+                // 3. Fetch all schedules
+                const { data: schedulesData, error: schedulesError } = await supabase
+                    .from("payment_schedules")
+                    .select("id, po_id, purchase_orders(currency)");
+
+                if (schedulesError) throw schedulesError;
+
+                // 4. Fetch all payments
                 const { data: paymentsData, error: paymentsError } = await supabase
                     .from("payments")
-                    .select("amount, purchase_orders(currency)");
+                    .select("amount, schedule_id");
 
                 if (paymentsError) throw paymentsError;
 
-                // 4. Group totals by Currency
+                // 5. Group totals by Currency
                 const cStats: Record<string, CurrencyStats> = {};
 
                 // Aggregate POs
@@ -58,11 +64,16 @@ export default function Dashboard() {
                     cStats[c].totalPO += (po.amount || 0);
                 });
 
+                // Map schedule_id -> currency
+                const scheduleCurrencyMap: Record<string, string> = {};
+                schedulesData?.forEach(sch => {
+                    const poData = sch.purchase_orders as any;
+                    scheduleCurrencyMap[sch.id] = poData?.currency || "USD";
+                });
+
                 // Aggregate Payments
                 paymentsData?.forEach(p => {
-                    // Type assertion since we know the join structure
-                    const poData = p.purchase_orders as any;
-                    const c = poData?.currency || "USD";
+                    const c = scheduleCurrencyMap[p.schedule_id] || "USD";
                     if (!cStats[c]) cStats[c] = { totalPO: 0, totalPaid: 0, remaining: 0, progress: 0 };
                     cStats[c].totalPaid += (p.amount || 0);
                 });
@@ -73,7 +84,7 @@ export default function Dashboard() {
                     cStats[c].progress = cStats[c].totalPO > 0 ? (cStats[c].totalPaid / cStats[c].totalPO) * 100 : 0;
                 });
 
-                // 5. Enrich projects with their PO totals
+                // 6. Enrich projects with their PO totals
                 const enrichedProjects = (projectsData || []).map((project) => {
                     const projectPOs = posData?.filter((po) => po.project_id === project.id) || [];
                     const projectTotalPO = projectPOs.reduce((sum, po) => sum + (po.amount || 0), 0);

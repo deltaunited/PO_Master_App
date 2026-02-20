@@ -22,13 +22,15 @@ export default function Reports() {
             try {
                 const supabase = createClient();
 
-                const [posRes, paymentsRes, schedulesRes] = await Promise.all([
+                const [posRes, schedulesRes, activeSchedulesRes, paymentsRes] = await Promise.all([
                     supabase.from('purchase_orders').select('id, amount, currency'),
-                    supabase.from('payments').select('amount, purchase_orders(currency)'),
-                    supabase.from('payment_schedules').select('*, purchase_orders(currency)').in('status', ['Pending', 'Partial'])
+                    supabase.from('payment_schedules').select('id, po_id, purchase_orders(currency)'),
+                    supabase.from('payment_schedules').select('*, purchase_orders(currency)').in('status', ['Pending', 'Partial']),
+                    supabase.from('payments').select('amount, schedule_id')
                 ]);
 
                 if (posRes.error) throw posRes.error;
+                if (paymentsRes.error) throw paymentsRes.error;
 
                 const cStats: Record<string, CurrencyStats> = {};
 
@@ -39,10 +41,16 @@ export default function Reports() {
                     cStats[c].totalPOAmount += (po.amount || 0);
                 });
 
+                // Map schedule_id -> currency
+                const scheduleCurrencyMap: Record<string, string> = {};
+                (schedulesRes.data || []).forEach(sch => {
+                    const poData = sch.purchase_orders as any;
+                    scheduleCurrencyMap[sch.id] = poData?.currency || "USD";
+                });
+
                 // Aggregate Paid
                 (paymentsRes.data || []).forEach(p => {
-                    const poData = p.purchase_orders as any;
-                    const c = poData?.currency || "USD";
+                    const c = scheduleCurrencyMap[p.schedule_id] || "USD";
                     if (!cStats[c]) cStats[c] = { totalPOAmount: 0, totalPaid: 0, totalPending: 0, overdueCount: 0, upcomingCount: 0 };
                     cStats[c].totalPaid += (p.amount || 0);
                 });
@@ -51,7 +59,7 @@ export default function Reports() {
                 const now = new Date();
                 now.setHours(0, 0, 0, 0);
 
-                (schedulesRes.data || []).forEach(s => {
+                (activeSchedulesRes.data || []).forEach(s => {
                     const poData = s.purchase_orders as any;
                     const c = poData?.currency || "USD";
                     if (!cStats[c]) cStats[c] = { totalPOAmount: 0, totalPaid: 0, totalPending: 0, overdueCount: 0, upcomingCount: 0 };
