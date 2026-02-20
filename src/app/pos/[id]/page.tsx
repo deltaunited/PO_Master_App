@@ -14,6 +14,7 @@ interface PurchaseOrder {
     amount: number;
     status: string;
     description: string;
+    suppliers?: { name: string };
 }
 
 interface PaymentSchedule {
@@ -192,7 +193,7 @@ export default function PODetail({ params }: { params: { id: string } }) {
     const fetchData = async () => {
         const supabase = createClient();
         const [{ data: poData }, { data: schedulesData }, { data: paymentsData }] = await Promise.all([
-            supabase.from("purchase_orders").select("*").eq("id", params.id).single(),
+            supabase.from("purchase_orders").select("*, suppliers(name)").eq("id", params.id).single(),
             supabase.from("payment_schedules").select("*").eq("po_id", params.id).order("payment_no"),
             supabase.from("payments").select("amount, schedule_id"),
         ]);
@@ -327,7 +328,7 @@ export default function PODetail({ params }: { params: { id: string } }) {
                             <div className="flex items-start">
                                 <Tag className="mr-2 h-4 w-4 text-muted-foreground mt-0.5" />
                                 <div>
-                                    <p className="font-semibold">{po.supplier_name}</p>
+                                    <p className="font-semibold">{po.suppliers?.name || po.supplier_name || "—"}</p>
                                     <p className="text-xs text-muted-foreground">Supplier</p>
                                 </div>
                             </div>

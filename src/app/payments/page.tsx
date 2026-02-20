@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/client";
 import { useEffect, useState } from "react";
-import { Calendar, ExternalLink, Filter, Receipt, X, DollarSign, Landmark, Building2 } from "lucide-react";
+import { Calendar, ExternalLink, Filter, Receipt, X, DollarSign, Landmark, Building2, Pencil, Trash2 } from "lucide-react";
 
 interface Payment {
     id: string;
@@ -242,10 +242,159 @@ function RegisterPaymentModal({ isOpen, onClose, onSuccess }: {
     );
 }
 
+function EditPaymentModal({ payment, isOpen, onClose, onSuccess }: {
+    payment: Payment | null;
+    isOpen: boolean;
+    onClose: () => void;
+    onSuccess: () => void;
+}) {
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [form, setForm] = useState({
+        amount: "",
+        date: "",
+        reference: "",
+        method: "Bank Transfer",
+        paid_by: "",
+    });
+
+    useEffect(() => {
+        if (!isOpen || !payment) return;
+        setForm({
+            amount: String(payment.amount),
+            date: payment.date,
+            reference: payment.reference,
+            method: payment.method,
+            paid_by: payment.paid_by || ""
+        });
+        setError(null);
+    }, [isOpen, payment]);
+
+    if (!isOpen || !payment) return null;
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        setError(null);
+        try {
+            const supabase = createClient();
+            const { error: updateError } = await supabase.from("payments").update({
+                amount: parseFloat(form.amount),
+                date: form.date,
+                reference: form.reference,
+                method: form.method,
+                paid_by: form.paid_by,
+            }).eq("id", payment.id);
+            if (updateError) throw updateError;
+            onSuccess();
+            onClose();
+        } catch (err: any) {
+            setError(err.message || "Failed to update payment.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <div className="bg-card border border-border w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden">
+                <div className="flex items-center justify-between p-6 border-b border-border">
+                    <div>
+                        <h3 className="text-xl font-bold">Edit Payment</h3>
+                        <p className="text-xs text-muted-foreground mt-0.5">Update payment details</p>
+                    </div>
+                    <button onClick={onClose} className="p-2 hover:bg-muted rounded-full transition-colors">
+                        <X className="h-5 w-5" />
+                    </button>
+                </div>
+                <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Amount Paid *</label>
+                            <div className="relative">
+                                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <input
+                                    required type="number" min="0" step="0.01"
+                                    value={form.amount}
+                                    onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
+                                    className="w-full bg-muted border border-border rounded-lg py-2.5 pl-9 pr-3 outline-none focus:ring-2 focus:ring-primary text-sm font-bold"
+                                    placeholder="0.00"
+                                />
+                            </div>
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Payment Date *</label>
+                            <div className="relative">
+                                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <input
+                                    required type="date"
+                                    value={form.date}
+                                    onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
+                                    className="w-full bg-muted border border-border rounded-lg py-2.5 pl-9 pr-3 outline-none focus:ring-2 focus:ring-primary text-sm"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Bank Reference *</label>
+                        <div className="relative">
+                            <Landmark className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <input
+                                required type="text" placeholder="e.g. UTR-2024-8899"
+                                value={form.reference}
+                                onChange={e => setForm(f => ({ ...f, reference: e.target.value }))}
+                                className="w-full bg-muted border border-border rounded-lg py-2.5 pl-9 pr-3 outline-none focus:ring-2 focus:ring-primary text-sm"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Method</label>
+                            <select
+                                value={form.method}
+                                onChange={e => setForm(f => ({ ...f, method: e.target.value }))}
+                                className="w-full bg-muted border border-border rounded-lg py-2.5 px-3 outline-none focus:ring-2 focus:ring-primary text-sm"
+                            >
+                                <option>Bank Transfer</option>
+                                <option>SWIFT</option>
+                                <option>Check</option>
+                                <option>Cash</option>
+                            </select>
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Paid By</label>
+                            <input
+                                type="text" placeholder="e.g. Finance Dept"
+                                value={form.paid_by}
+                                onChange={e => setForm(f => ({ ...f, paid_by: e.target.value }))}
+                                className="w-full bg-muted border border-border rounded-lg py-2.5 px-3 outline-none focus:ring-2 focus:ring-primary text-sm"
+                            />
+                        </div>
+                    </div>
+
+                    {error && <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">{error}</p>}
+                    <div className="pt-2 flex items-center space-x-3">
+                        <button type="button" onClick={onClose} className="flex-1 py-2.5 px-4 border border-border rounded-xl font-bold text-sm hover:bg-muted transition-colors">
+                            Cancel
+                        </button>
+                        <button type="submit" disabled={loading} className="flex-[2] py-2.5 px-4 bg-primary text-primary-foreground rounded-xl font-bold text-sm hover:bg-primary/90 transition-all disabled:opacity-50">
+                            {loading ? "Saving..." : "Save Changes"}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+}
+
 export default function Payments() {
     const [payments, setPayments] = useState<Payment[]>([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
+    const [deletingId, setDeletingId] = useState<string | null>(null);
 
     const fetchPayments = async () => {
         const supabase = createClient();
@@ -259,6 +408,15 @@ export default function Payments() {
     };
 
     useEffect(() => { fetchPayments(); }, []);
+
+    const handleDelete = async (id: string) => {
+        const supabase = createClient();
+        await supabase.from("payments").delete().eq("id", id);
+        setDeletingId(null);
+        fetchData();
+    };
+
+    const fetchData = fetchPayments;
 
     return (
         <div className="space-y-6">
@@ -301,7 +459,7 @@ export default function Payments() {
                                 <th className="px-6 py-4">Method</th>
                                 <th className="px-6 py-4">Amount Paid</th>
                                 <th className="px-6 py-4">Registered By</th>
-                                <th className="px-6 py-4">Receipt</th>
+                                <th className="px-6 py-4">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border text-sm">
@@ -330,9 +488,21 @@ export default function Payments() {
                                     <td className="px-6 py-4 font-bold text-emerald-400">${payment.amount?.toLocaleString()}</td>
                                     <td className="px-6 py-4 text-muted-foreground">{payment.paid_by || "—"}</td>
                                     <td className="px-6 py-4">
-                                        <button className="flex items-center text-primary font-semibold text-xs hover:underline">
-                                            View <ExternalLink className="ml-1 h-3 w-3" />
-                                        </button>
+                                        <div className="flex items-center gap-1">
+                                            <button onClick={() => setEditingPayment(payment)} className="p-1.5 hover:bg-muted rounded-lg transition-colors" title="Edit Payment">
+                                                <Pencil className="h-4 w-4 text-muted-foreground" />
+                                            </button>
+                                            {deletingId === payment.id ? (
+                                                <span className="flex items-center gap-1">
+                                                    <button onClick={() => handleDelete(payment.id)} className="px-2 py-1 text-[10px] font-bold bg-destructive text-destructive-foreground rounded-md">Confirm</button>
+                                                    <button onClick={() => setDeletingId(null)} className="px-2 py-1 text-[10px] font-bold bg-muted rounded-md">Cancel</button>
+                                                </span>
+                                            ) : (
+                                                <button onClick={() => setDeletingId(payment.id)} className="p-1.5 hover:bg-destructive/10 hover:text-destructive rounded-lg transition-colors" title="Delete Payment">
+                                                    <Trash2 className="h-4 w-4 text-muted-foreground" />
+                                                </button>
+                                            )}
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
@@ -344,6 +514,13 @@ export default function Payments() {
             <RegisterPaymentModal
                 isOpen={isModalOpen}
                 onClose={() => setIsModalOpen(false)}
+                onSuccess={fetchPayments}
+            />
+
+            <EditPaymentModal
+                payment={editingPayment}
+                isOpen={!!editingPayment}
+                onClose={() => setEditingPayment(null)}
                 onSuccess={fetchPayments}
             />
         </div>

@@ -2,22 +2,36 @@
 
 import { createClient } from "@/lib/supabase/client";
 import { useEffect, useState } from "react";
-import { ShoppingCart, Calendar, Building2, ChevronRight, X, DollarSign, FileText, Plus, Trash2 } from "lucide-react";
+import { ShoppingCart, Calendar, Building2, ChevronRight, X, DollarSign, FileText, Plus, Trash2, Pencil } from "lucide-react";
+import { AddCurrencyModal } from "@/components/AddCurrencyModal";
+import { AddSupplierModal } from "@/components/AddSupplierModal";
 
 interface PurchaseOrder {
     id: string;
     po_number: string;
     project_id: string;
-    supplier_name: string;
+    supplier_id: string | null;
+    supplier_name: string | null; // Legacy
     date: string;
     amount: number;
     currency: string;
     status: string;
     description: string;
+    suppliers?: { name: string };
 }
 
 interface Project {
     id: string;
+    name: string;
+}
+
+interface Supplier {
+    id: string;
+    name: string;
+}
+
+interface Currency {
+    code: string;
     name: string;
 }
 
@@ -27,25 +41,29 @@ interface ScheduleRow {
     due_date: string;
 }
 
-const CURRENCIES = ["USD", "EUR", "GBP", "VES", "AED", "SAR"];
 const SCHEDULE_TYPES = ["Advance", "Milestone", "Final", "Retention", "Variation"];
 const STATUS_OPTIONS = ["Issued", "Approved", "In Progress", "Closed", "Cancelled"];
 
-function NewPOModal({ isOpen, onClose, projects, onSuccess }: {
+function NewPOModal({ isOpen, onClose, projects, suppliers, currencies, onSuccess }: {
     isOpen: boolean;
     onClose: () => void;
     projects: Project[];
+    suppliers: Supplier[];
+    currencies: Currency[];
     onSuccess: () => void;
 }) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [isAddSupplierOpen, setIsAddSupplierOpen] = useState(false);
+    const [isAddCurrencyOpen, setIsAddCurrencyOpen] = useState(false);
+
     const [form, setForm] = useState({
         po_number: "",
         project_id: "",
-        supplier_name: "",
+        supplier_id: "",
         date: new Date().toISOString().split("T")[0],
         amount: "",
-        currency: "USD",
+        currency: currencies.length > 0 ? currencies[0].code : "USD",
         description: "",
         status: "Issued",
     });
@@ -56,16 +74,20 @@ function NewPOModal({ isOpen, onClose, projects, onSuccess }: {
 
     useEffect(() => {
         if (isOpen) {
-            setForm({ po_number: "", project_id: "", supplier_name: "", date: new Date().toISOString().split("T")[0], amount: "", currency: "USD", description: "", status: "Issued" });
+            setForm({
+                po_number: "", project_id: "", supplier_id: "",
+                date: new Date().toISOString().split("T")[0],
+                amount: "", currency: currencies.length > 0 ? currencies[0].code : "USD",
+                description: "", status: "Issued"
+            });
             setScheduleRows([{ type: "Advance", percentage: "30", due_date: "" }, { type: "Final", percentage: "70", due_date: "" }]);
             setError(null);
         }
-    }, [isOpen]);
+    }, [isOpen, currencies]);
 
     if (!isOpen) return null;
 
     const totalPct = scheduleRows.reduce((sum, r) => sum + (parseFloat(r.percentage) || 0), 0);
-
     const addRow = () => setScheduleRows(rows => [...rows, { type: "Milestone", percentage: "", due_date: "" }]);
     const removeRow = (i: number) => setScheduleRows(rows => rows.filter((_, idx) => idx !== i));
     const updateRow = (i: number, field: keyof ScheduleRow, value: string) =>
@@ -91,7 +113,9 @@ function NewPOModal({ isOpen, onClose, projects, onSuccess }: {
                 .insert({
                     po_number: form.po_number,
                     project_id: form.project_id || null,
-                    supplier_name: form.supplier_name,
+                    supplier_id: form.supplier_id || null, // null if they somehow didn't pick one
+                    // Still write to supplier_name if we want backwards compat with old views that don't join, just in case
+                    supplier_name: suppliers.find(s => s.id === form.supplier_id)?.name || null,
                     date: form.date,
                     amount: totalAmount,
                     currency: form.currency,
@@ -142,7 +166,6 @@ function NewPOModal({ isOpen, onClose, projects, onSuccess }: {
 
                 <form onSubmit={handleSubmit} className="overflow-y-auto">
                     <div className="p-6 space-y-4">
-                        {/* PO Details */}
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1.5">
                                 <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">PO Number *</label>
@@ -167,27 +190,40 @@ function NewPOModal({ isOpen, onClose, projects, onSuccess }: {
                         </div>
 
                         <div className="space-y-1.5">
-                            <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Supplier *</label>
+                            <div className="flex items-center justify-between">
+                                <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Supplier *</label>
+                                <button type="button" onClick={() => setIsAddSupplierOpen(true)} className="text-[10px] font-bold text-primary hover:underline flex items-center">
+                                    <Plus className="h-3 w-3 mr-0.5" /> Add New
+                                </button>
+                            </div>
                             <div className="relative">
                                 <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                <input
-                                    required type="text" placeholder="Supplier name"
-                                    value={form.supplier_name}
-                                    onChange={e => setForm(f => ({ ...f, supplier_name: e.target.value }))}
+                                <select
+                                    required
+                                    value={form.supplier_id}
+                                    onChange={e => setForm(f => ({ ...f, supplier_id: e.target.value }))}
                                     className="w-full bg-muted border border-border rounded-lg py-2.5 pl-9 pr-3 outline-none focus:ring-2 focus:ring-primary text-sm"
-                                />
+                                >
+                                    <option value="">— Select Supplier —</option>
+                                    {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                </select>
                             </div>
                         </div>
 
                         <div className="grid grid-cols-3 gap-4">
                             <div className="space-y-1.5 col-span-1">
-                                <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Currency</label>
+                                <div className="flex items-center justify-between">
+                                    <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Currency</label>
+                                    <button type="button" onClick={() => setIsAddCurrencyOpen(true)} className="text-[10px] font-bold text-primary hover:underline flex items-center">
+                                        <Plus className="h-3 w-3 mr-0.5" /> New
+                                    </button>
+                                </div>
                                 <select
                                     value={form.currency}
                                     onChange={e => setForm(f => ({ ...f, currency: e.target.value }))}
                                     className="w-full bg-muted border border-border rounded-lg py-2.5 px-3 outline-none focus:ring-2 focus:ring-primary text-sm font-bold"
                                 >
-                                    {CURRENCIES.map(c => <option key={c}>{c}</option>)}
+                                    {currencies.map(c => <option key={c.code} value={c.code}>{c.code} - {c.name}</option>)}
                                 </select>
                             </div>
                             <div className="space-y-1.5 col-span-1">
@@ -320,6 +356,140 @@ function NewPOModal({ isOpen, onClose, projects, onSuccess }: {
                     </div>
                 </form>
             </div>
+
+            <AddSupplierModal isOpen={isAddSupplierOpen} onClose={() => setIsAddSupplierOpen(false)} onSuccess={() => { setIsAddSupplierOpen(false); onSuccess(); }} />
+            <AddCurrencyModal isOpen={isAddCurrencyOpen} onClose={() => setIsAddCurrencyOpen(false)} onSuccess={() => { setIsAddCurrencyOpen(false); onSuccess(); }} />
+        </div>
+    );
+}
+
+// ——— Edit PO Modal ———
+function EditPOModal({ po, projects, suppliers, currencies, onClose, onSuccess }: {
+    po: PurchaseOrder | null;
+    projects: Project[];
+    suppliers: Supplier[];
+    currencies: Currency[];
+    onClose: () => void;
+    onSuccess: () => void;
+}) {
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [form, setForm] = useState({ po_number: "", project_id: "", supplier_id: "", date: "", amount: "", currency: "USD", description: "", status: "Issued" });
+
+    useEffect(() => {
+        if (po) {
+            setForm({
+                po_number: po.po_number,
+                project_id: po.project_id || "",
+                supplier_id: po.supplier_id || "",
+                date: po.date,
+                amount: String(po.amount),
+                currency: po.currency,
+                description: po.description || "",
+                status: po.status
+            });
+        }
+        setError(null);
+    }, [po]);
+
+    if (!po) return null;
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        setError(null);
+        try {
+            const supabase = createClient();
+            const { error: updateError } = await supabase.from("purchase_orders").update({
+                po_number: form.po_number,
+                project_id: form.project_id || null,
+                supplier_id: form.supplier_id || null,
+                supplier_name: suppliers.find(s => s.id === form.supplier_id)?.name || null,
+                date: form.date,
+                amount: parseFloat(form.amount),
+                currency: form.currency,
+                description: form.description,
+                status: form.status,
+            }).eq("id", po.id);
+            if (updateError) throw updateError;
+            onSuccess();
+            onClose();
+        } catch (err: any) {
+            setError(err.message || "Failed to update PO.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <div className="bg-card border border-border w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden">
+                <div className="flex items-center justify-between p-6 border-b border-border">
+                    <div>
+                        <h3 className="text-xl font-bold">Edit Purchase Order</h3>
+                        <p className="text-xs text-muted-foreground mt-0.5">Update details for <span className="text-primary font-semibold">{po.po_number}</span></p>
+                    </div>
+                    <button onClick={onClose} className="p-2 hover:bg-muted rounded-full transition-colors"><X className="h-5 w-5" /></button>
+                </div>
+                <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">PO Number *</label>
+                            <input required type="text" value={form.po_number} onChange={e => setForm(f => ({ ...f, po_number: e.target.value }))} className="w-full bg-muted border border-border rounded-lg py-2.5 px-3 outline-none focus:ring-2 focus:ring-primary text-sm" />
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Project</label>
+                            <select value={form.project_id} onChange={e => setForm(f => ({ ...f, project_id: e.target.value }))} className="w-full bg-muted border border-border rounded-lg py-2.5 px-3 outline-none focus:ring-2 focus:ring-primary text-sm">
+                                <option value="">— Select Project —</option>
+                                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            </select>
+                        </div>
+                    </div>
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Supplier *</label>
+                        <div className="relative"><Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <select
+                                required
+                                value={form.supplier_id}
+                                onChange={e => setForm(f => ({ ...f, supplier_id: e.target.value }))}
+                                className="w-full bg-muted border border-border rounded-lg py-2.5 pl-9 pr-3 outline-none focus:ring-2 focus:ring-primary text-sm"
+                            >
+                                <option value="">— Select Supplier —</option>
+                                {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                            </select>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4">
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Currency</label>
+                            <select value={form.currency} onChange={e => setForm(f => ({ ...f, currency: e.target.value }))} className="w-full bg-muted border border-border rounded-lg py-2.5 px-3 outline-none focus:ring-2 focus:ring-primary text-sm font-bold">
+                                {currencies.map(c => <option key={c.code} value={c.code}>{c.code}</option>)}
+                            </select>
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Amount *</label>
+                            <div className="relative"><DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <input required type="number" min="0" step="0.01" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} className="w-full bg-muted border border-border rounded-lg py-2.5 pl-9 pr-3 outline-none focus:ring-2 focus:ring-primary text-sm font-bold" /></div>
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Status</label>
+                            <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} className="w-full bg-muted border border-border rounded-lg py-2.5 px-3 outline-none focus:ring-2 focus:ring-primary text-sm">
+                                {STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}
+                            </select>
+                        </div>
+                    </div>
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Description</label>
+                        <div className="relative"><FileText className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                            <textarea rows={2} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className="w-full bg-muted border border-border rounded-lg py-2.5 pl-9 pr-3 outline-none focus:ring-2 focus:ring-primary text-sm resize-none" /></div>
+                    </div>
+                    {error && <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">{error}</p>}
+                    <div className="pt-2 flex items-center space-x-3">
+                        <button type="button" onClick={onClose} className="flex-1 py-2.5 px-4 border border-border rounded-xl font-bold text-sm hover:bg-muted transition-colors">Cancel</button>
+                        <button type="submit" disabled={loading} className="flex-[2] py-2.5 px-4 bg-primary text-primary-foreground rounded-xl font-bold text-sm hover:bg-primary/90 disabled:opacity-50">{loading ? "Saving..." : "Save Changes"}</button>
+                    </div>
+                </form>
+            </div>
         </div>
     );
 }
@@ -335,24 +505,46 @@ const STATUS_COLORS: Record<string, string> = {
 export default function PurchaseOrders() {
     const [pos, setPos] = useState<PurchaseOrder[]>([]);
     const [projects, setProjects] = useState<Project[]>([]);
+    const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+    const [currencies, setCurrencies] = useState<Currency[]>([]);
     const [loading, setLoading] = useState(true);
-    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isNewModalOpen, setIsNewModalOpen] = useState(false);
+    const [editingPO, setEditingPO] = useState<PurchaseOrder | null>(null);
+    const [deletingId, setDeletingId] = useState<string | null>(null);
 
     const fetchData = async () => {
         const supabase = createClient();
-        const [{ data: posData }, { data: projectsData }] = await Promise.all([
-            supabase.from("purchase_orders").select("*").order("date", { ascending: false }),
+        const [
+            { data: posData },
+            { data: projectsData },
+            { data: suppliersData },
+            { data: currenciesData }
+        ] = await Promise.all([
+            supabase.from("purchase_orders").select("*, suppliers(name)").order("date", { ascending: false }),
             supabase.from("projects").select("id, name"),
+            supabase.from("suppliers").select("*").order("name"),
+            supabase.from("currencies").select("*").order("code")
         ]);
         setPos(posData || []);
         setProjects(projectsData || []);
+        setSuppliers(suppliersData || []);
+        setCurrencies(currenciesData || []);
         setLoading(false);
     };
 
     useEffect(() => { fetchData(); }, []);
 
-    const getProjectName = (projectId: string) =>
-        projects.find(p => p.id === projectId)?.name || "—";
+    const getProjectName = (projectId: string) => projects.find(p => p.id === projectId)?.name || "—";
+
+    // Display the joined supplier name, or fallback to the legacy supplier_name column
+    const getSupplierName = (po: PurchaseOrder) => po.suppliers?.name || po.supplier_name || "—";
+
+    const handleDelete = async (id: string) => {
+        const supabase = createClient();
+        await supabase.from("purchase_orders").delete().eq("id", id);
+        setDeletingId(null);
+        fetchData();
+    };
 
     return (
         <div className="space-y-6">
@@ -362,7 +554,7 @@ export default function PurchaseOrders() {
                     <p className="text-muted-foreground">Manage and track all issued purchase orders.</p>
                 </div>
                 <button
-                    onClick={() => setIsModalOpen(true)}
+                    onClick={() => setIsNewModalOpen(true)}
                     className="flex items-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors shadow-sm"
                 >
                     <Plus className="mr-2 h-4 w-4" /> New PO
@@ -390,7 +582,7 @@ export default function PurchaseOrders() {
                                 <th className="px-6 py-4">Date</th>
                                 <th className="px-6 py-4">Amount</th>
                                 <th className="px-6 py-4">Status</th>
-                                <th className="px-6 py-4"></th>
+                                <th className="px-6 py-4">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border text-sm">
@@ -401,7 +593,7 @@ export default function PurchaseOrders() {
                                     <td className="px-6 py-4">
                                         <div className="flex items-center">
                                             <Building2 className="mr-2 h-4 w-4 text-muted-foreground" />
-                                            {po.supplier_name}
+                                            {getSupplierName(po)}
                                         </div>
                                     </td>
                                     <td className="px-6 py-4">
@@ -419,10 +611,25 @@ export default function PurchaseOrders() {
                                             {po.status}
                                         </span>
                                     </td>
-                                    <td className="px-6 py-4 text-right">
-                                        <a href={`/pos/${po.id}`} className="p-2 hover:bg-muted rounded-full inline-block transition-colors">
-                                            <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                                        </a>
+                                    <td className="px-6 py-4">
+                                        <div className="flex items-center gap-1">
+                                            <a href={`/pos/${po.id}`} className="p-1.5 hover:bg-muted rounded-lg inline-block transition-colors" title="View detail">
+                                                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                                            </a>
+                                            <button onClick={() => setEditingPO(po)} className="p-1.5 hover:bg-muted rounded-lg transition-colors" title="Edit PO">
+                                                <Pencil className="h-4 w-4 text-muted-foreground" />
+                                            </button>
+                                            {deletingId === po.id ? (
+                                                <span className="flex items-center gap-1">
+                                                    <button onClick={() => handleDelete(po.id)} className="px-2 py-1 text-[10px] font-bold bg-destructive text-destructive-foreground rounded-md">Confirm</button>
+                                                    <button onClick={() => setDeletingId(null)} className="px-2 py-1 text-[10px] font-bold bg-muted rounded-md">Cancel</button>
+                                                </span>
+                                            ) : (
+                                                <button onClick={() => setDeletingId(po.id)} className="p-1.5 hover:bg-destructive/10 hover:text-destructive rounded-lg transition-colors" title="Delete PO">
+                                                    <Trash2 className="h-4 w-4 text-muted-foreground" />
+                                                </button>
+                                            )}
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
@@ -432,9 +639,19 @@ export default function PurchaseOrders() {
             )}
 
             <NewPOModal
-                isOpen={isModalOpen}
-                onClose={() => setIsModalOpen(false)}
+                isOpen={isNewModalOpen}
+                onClose={() => setIsNewModalOpen(false)}
                 projects={projects}
+                suppliers={suppliers}
+                currencies={currencies}
+                onSuccess={fetchData}
+            />
+            <EditPOModal
+                po={editingPO}
+                projects={projects}
+                suppliers={suppliers}
+                currencies={currencies}
+                onClose={() => setEditingPO(null)}
                 onSuccess={fetchData}
             />
         </div>
